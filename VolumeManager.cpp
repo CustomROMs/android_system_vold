@@ -642,11 +642,6 @@ int VolumeManager::unmountAll() {
     }
     endmntent(fp);
 
-    for (const auto& path : toUnmount) {
-        LOG(DEBUG) << "Tearing down stale mount " << path;
-        android::vold::ForceUnmount(path);
-    }
-
     return 0;
 }
 
