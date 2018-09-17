@@ -126,9 +126,6 @@ bool Readlinkat(int dirfd, const std::string& path, std::string* result);
 bool WaitForFile(const std::string& filename,
         const std::chrono::milliseconds relativeTimeout);
 
-bool WaitForFile(const std::string& filename,
-        const std::chrono::milliseconds relativeTimeout);
-
 /* Checks if Android is running in QEMU */
 bool IsRunningInEmulator();
 
