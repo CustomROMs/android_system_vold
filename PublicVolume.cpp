@@ -65,10 +65,10 @@ PublicVolume::~PublicVolume() {
 }
 
 status_t PublicVolume::readMetadata() {
-    status_t res = ReadMetadataUntrusted(mDevPath, mFsType, mFsUuid, mFsLabel);
+    std::string unused;
+    status_t res = ReadMetadataUntrusted(mDevPath, mFsType, mFsUuid, unused);
     notifyEvent(ResponseCode::VolumeFsTypeChanged, mFsType);
     notifyEvent(ResponseCode::VolumeFsUuidChanged, mFsUuid);
-    notifyEvent(ResponseCode::VolumeFsLabelChanged, mFsLabel);
     return res;
 }
 
@@ -116,9 +116,11 @@ status_t PublicVolume::doMount() {
         return -EIO;
     }
 
-    // Use UUID as stable name, if available
+    // Use volume label and otherwise UUID as stable name, if available
     std::string stableName = getId();
-    if (!mFsUuid.empty()) {
+    if (!mFsLabel.empty()) {
+        stableName = mFsLabel;
+    } else if (!mFsUuid.empty()) {
         stableName = mFsUuid;
     }
 
@@ -218,27 +220,16 @@ status_t PublicVolume::doMount() {
     dev_t before = GetDevice(mFuseWrite);
 
     if (!(mFusePid = fork())) {
-        if (getMountFlags() & MountFlags::kPrimary) {
-            if (execl(kFusePath, kFusePath,
-                    "-u", "1023", // AID_MEDIA_RW
-                    "-g", "1023", // AID_MEDIA_RW
-                    "-U", std::to_string(getMountUserId()).c_str(),
-                    "-w",
-                    mRawPath.c_str(),
-                    stableName.c_str(),
-                    NULL)) {
-                PLOG(ERROR) << "Failed to exec";
-            }
-        } else {
-            if (execl(kFusePath, kFusePath,
-                    "-u", "1023", // AID_MEDIA_RW
-                    "-g", "1023", // AID_MEDIA_RW
-                    "-U", std::to_string(getMountUserId()).c_str(),
-                    mRawPath.c_str(),
-                    stableName.c_str(),
-                    NULL)) {
-                PLOG(ERROR) << "Failed to exec";
-            }
+        if (execl(kFusePath, kFusePath,
+                  "-u", "1023", // AID_MEDIA_RW
+                  "-g", "1023", // AID_MEDIA_RW
+                  "-U", std::to_string(getMountUserId()).c_str(),
+                  "-m",
+                  "-w",
+                  mRawPath.c_str(),
+                  stableName.c_str(),
+                  NULL)) {
+            PLOG(ERROR) << "Failed to exec";
         }
 
         LOG(ERROR) << "FUSE exiting";
@@ -255,7 +246,8 @@ status_t PublicVolume::doMount() {
         usleep(50000); // 50ms
     }
     /* sdcardfs will have exited already. FUSE will still be running */
-    TEMP_FAILURE_RETRY(waitpid(mFusePid, nullptr, WNOHANG));
+    if (TEMP_FAILURE_RETRY(waitpid(mFusePid, nullptr, WNOHANG)) == mFusePid)
+        mFusePid = 0;
 
     return OK;
 }
